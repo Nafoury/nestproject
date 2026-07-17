@@ -1,0 +1,180 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  user
+  admin
+  super_admin
+}
+
+enum AttributeDataType {
+  text
+  number
+  boolean
+  select
+}
+
+enum SubscriptionStatus {
+  active
+  expired
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+}
+
+model User {
+  id        BigInt   @id @default(autoincrement())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  email     String   @unique
+  password  String
+  phone     String
+  role      UserRole @default(user)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  products      Product[]
+  subscriptions UserSubscription[]
+  payments      Payment[]
+
+  @@map("users")
+}
+
+model Category {
+  id        BigInt   @id @default(autoincrement())
+  parentId  BigInt?  @map("parent_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  products   Product[]
+  attributes CategoryAttribute[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          BigInt   @id @default(autoincrement())
+  userId      BigInt   @map("user_id")
+  categoryId  BigInt   @map("category_id")
+  title       String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  viewsCount  Int      @default(0) @map("views_count")
+  isFeatured  Boolean  @default(false) @map("is_featured")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user     User               @relation(fields: [userId], references: [id])
+  category Category           @relation(fields: [categoryId], references: [id])
+  images   ProductImage[]
+  attributes ProductAttribute[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id        BigInt  @id @default(autoincrement())
+  productId BigInt  @map("product_id")
+  imageUrl  String  @map("image_url")
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("product_images")
+}
+
+model Attribute {
+  id       BigInt            @id @default(autoincrement())
+  name     String
+  dataType AttributeDataType @map("data_type")
+
+  categories CategoryAttribute[]
+  products   ProductAttribute[]
+
+  @@map("attributes")
+}
+
+model CategoryAttribute {
+  id          BigInt  @id @default(autoincrement())
+  categoryId  BigInt  @map("category_id")
+  attributeId BigInt  @map("attribute_id")
+  isRequired  Boolean @default(false) @map("is_required")
+
+  category  Category  @relation(fields: [categoryId], references: [id])
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  @@unique([categoryId, attributeId])
+  @@map("category_attributes")
+}
+
+// تم تعديل هذا الموديل بالكامل ليتناسب مع فلاتر أجهزة الـ GPS المتطورة
+model ProductAttribute {
+  id          BigInt  @id @default(autoincrement())
+  productId   BigInt  @map("product_id")
+  attributeId BigInt  @map("attribute_id")
+  
+  // حقول اختيارية مقسمة حسب نوع البيانات لتمكين الفلترة الاحترافية (Ranges & Multi-select)
+  textValue    String?  @map("text_value")
+  numberValue  Decimal? @db.Decimal(10, 2) @map("number_value")
+  booleanValue Boolean? @map("boolean_value")
+
+  product   Product   @relation(fields: [productId], references: [id])
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  // تم حذف الـ @@unique([productId, attributeId]) لكي يستوعب الخيارات المتعددة (مثل دعم أكثر من شبكة اتصال)
+  @@map("product_attributes")
+}
+
+model SubscriptionPlan {
+  id           BigInt             @id @default(autoincrement())
+  name         String
+  price        Decimal            @db.Decimal(10, 2)
+  adsLimit     Int                @map("ads_limit")
+  durationDays Int                @map("duration_days")
+  subscriptions UserSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id        BigInt             @id @default(autoincrement())
+  userId    BigInt             @map("user_id")
+  planId    BigInt             @map("plan_id")
+  startsAt  DateTime           @map("starts_at")
+  expiresAt DateTime           @map("expires_at")
+  status    SubscriptionStatus
+
+  user     User             @relation(fields: [userId], references: [id])
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@map("user_subscriptions")
+}
+
+model Payment {
+  id             BigInt        @id @default(autoincrement())
+  userId         BigInt        @map("user_id")
+  subscriptionId BigInt        @map("subscription_id")
+  amount         Decimal       @db.Decimal(10, 2)
+  paymentMethod  String        @map("payment_method")
+  paymentStatus  PaymentStatus @map("payment_status")
+  transactionId  String        @map("transaction_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  user         User             @relation(fields: [userId], references: [id])
+  subscription UserSubscription @relation(fields: [subscriptionId], references: [id])
+
+  @@map("payments")
+}
