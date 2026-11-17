@@ -1,0 +1,318 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  user
+  admin
+  super_admin
+}
+
+enum AttributeValueType {
+  text
+  number
+  boolean
+}
+
+enum NumberType {
+  integer
+  decimal
+}
+
+enum UnitType {
+  mm
+  cm
+  m
+  g
+  kg
+  inch
+  mAh
+  GB
+  TB
+  MHz
+  GHz
+  V
+  W
+  hour
+  percent
+  grams
+  C
+  minutes
+  months
+  hours
+  years
+  days
+}
+
+enum SubscriptionStatus {
+  active
+  expired
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+}
+
+enum FilterType {
+  checkbox
+  radio
+  range
+  text
+  toggle
+  intersection
+  range_inverted
+  radio_min
+  radio_alt
+  toggle_exclude
+  checkbox_min
+}
+
+enum VisibilityOperator {
+  equals
+  not_equals
+  greater_than
+  less_than
+  greater_than_or_equal
+  less_than_or_equal
+  contains
+  not_contains
+}
+
+model User {
+  id        BigInt   @id @default(autoincrement())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  email     String   @unique
+  password  String
+  phone     String
+  role      UserRole @default(user)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  products      Product[]
+  subscriptions UserSubscription[]
+  payments      Payment[]
+
+  @@map("users")
+}
+
+model Category {
+  id        BigInt   @id @default(autoincrement())
+  parentId  BigInt?  @map("parent_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  fileId    String?  @map("file") @db.Uuid
+  slug       String              @unique
+  parent     Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children   Category[]          @relation("CategoryHierarchy")
+  products   Product[]
+  attributes CategoryAttribute[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          BigInt   @id @default(autoincrement())
+  userId      BigInt   @map("user_id")
+  categoryId  BigInt   @map("category_id")
+  title       String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  viewsCount  Int      @default(0) @map("views_count")
+  isFeatured  Boolean  @default(false) @map("is_featured")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user       User               @relation(fields: [userId], references: [id])
+  category   Category           @relation(fields: [categoryId], references: [id])
+  images     ProductImage[]
+  attributes ProductAttribute[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id BigInt @id @default(autoincrement())
+  productId BigInt  @map("product_id")
+  fileId    String  @map("file") @db.Uuid
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  product Product @relation(fields: [productId], references: [id] , onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+model Attribute {
+  id BigInt @id @default(autoincrement())
+
+  name String
+
+  description String?
+
+  section String?
+
+  valueType AttributeValueType
+
+  numberType NumberType?
+
+  categories CategoryAttribute[]
+
+  products ProductAttribute[]
+
+  options AttributeOption[]
+
+  groupId BigInt
+  group   AttributeGroup @relation(fields: [groupId], references: [id])
+
+  allowMultiple Boolean @default(true)
+
+  slug String @unique
+
+  filterType FilterType
+
+  unit String?
+
+  maxSelections Int?
+
+  visibilityRules AttributeVisibility[] @relation("AttributeVisibility")
+  dependentRules  AttributeVisibility[] @relation("DependsOnAttribute")
+
+  @@map("attributes")
+}
+
+model AttributeGroup {
+  id        BigInt @id @default(autoincrement())
+  name      String
+  slug      String @unique
+  sortOrder Int
+
+  attributes Attribute[]
+}
+
+model AttributeVisibility {
+  id BigInt @id @default(autoincrement())
+
+  attributeId          BigInt
+  dependsOnAttributeId BigInt
+
+  operator VisibilityOperator
+
+  value String
+
+  attribute Attribute @relation("AttributeVisibility", fields: [attributeId], references: [id])
+
+  dependsOn Attribute @relation("DependsOnAttribute", fields: [dependsOnAttributeId], references: [id])
+}
+
+model CategoryAttribute {
+  id          BigInt  @id @default(autoincrement())
+  categoryId  BigInt  @map("category_id")
+  attributeId BigInt  @map("attribute_id")
+  isRequired  Boolean @default(false) @map("is_required")
+
+  category  Category  @relation(fields: [categoryId], references: [id])
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  @@unique([categoryId, attributeId])
+  @@map("category_attributes")
+}
+
+model ProductAttribute {
+  id          BigInt @id @default(autoincrement())
+  productId   BigInt @map("product_id")
+  attributeId BigInt @map("attribute_id")
+
+  textValue   String?  @map("text_value")
+  numberValue Decimal? @db.Decimal(10, 2)
+
+  numberMin    Decimal? @db.Decimal(10, 2)
+  numberMax    Decimal? @db.Decimal(10, 2)
+  booleanValue Boolean? @map("boolean_value")
+
+  product      Product                  @relation(fields: [productId], references: [id] ,onDelete: Cascade)
+  attribute    Attribute                @relation(fields: [attributeId], references: [id])
+  optionValues ProductAttributeOption[]
+
+  @@unique([productId, attributeId])
+  @@map("product_attributes")
+}
+
+model AttributeOption {
+  id BigInt @id @default(autoincrement())
+
+  attributeId BigInt
+
+  value String
+
+  displayName String?
+
+  sortOrder Int @default(0)
+
+  attribute      Attribute                @relation(fields: [attributeId], references: [id])
+  productOptions ProductAttributeOption[]
+
+  @@unique([attributeId, value])
+  @@map("attribute_options")
+}
+
+model ProductAttributeOption {
+  id BigInt @id @default(autoincrement())
+
+  productAttributeId BigInt
+  attributeOptionId  BigInt
+
+  productAttribute ProductAttribute @relation(fields: [productAttributeId], references: [id], onDelete: Cascade)
+  attributeOption  AttributeOption  @relation(fields: [attributeOptionId], references: [id])
+
+  @@unique([productAttributeId, attributeOptionId])
+  @@index([attributeOptionId])
+  @@map("product_attribute_options")
+}
+
+model SubscriptionPlan {
+  id            BigInt             @id @default(autoincrement())
+  name          String
+  price         Decimal            @db.Decimal(10, 2)
+  adsLimit      Int                @map("ads_limit")
+  durationDays  Int                @map("duration_days")
+  subscriptions UserSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id        BigInt             @id @default(autoincrement())
+  userId    BigInt             @map("user_id")
+  planId    BigInt             @map("plan_id")
+  startsAt  DateTime           @map("starts_at")
+  expiresAt DateTime           @map("expires_at")
+  status    SubscriptionStatus
+
+  user     User             @relation(fields: [userId], references: [id])
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@map("user_subscriptions")
+}
+
+model Payment {
+  id             BigInt        @id @default(autoincrement())
+  userId         BigInt        @map("user_id")
+  subscriptionId BigInt        @map("subscription_id")
+  amount         Decimal       @db.Decimal(10, 2)
+  paymentMethod  String        @map("payment_method")
+  paymentStatus  PaymentStatus @map("payment_status")
+  transactionId  String        @map("transaction_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  user         User             @relation(fields: [userId], references: [id])
+  subscription UserSubscription @relation(fields: [subscriptionId], references: [id])
+
+  @@map("payments")
+}
